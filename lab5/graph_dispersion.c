@@ -48,9 +48,9 @@ int main(int argc, char ** args) {
 		 7, // Node 3 - 2 neighbours
 		10, // Node 4 - 3 neighbours
 		11, // Node 5 - 1 neighbours
-		13, // Node 6 - 2 neighbours
-		14, // Node 7 - 1 neighbours
-		15, // Node 8 - 1 neighbours
+		14, // Node 6 - 2 neighbours
+		15, // Node 7 - 1 neighbours
+		16, // Node 8 - 1 neighbours
 	};
 	int edges[] = {		// Graph edges
 		4,			// n0
@@ -59,7 +59,7 @@ int main(int argc, char ** args) {
 		4, 6,		// n3
 		0, 2, 3,	// n4
 		6,			// n5
-		1, 5,		// n6
+		1, 3, 5,	// n6
 		2,			// n7
 		2			// n8
 	};
