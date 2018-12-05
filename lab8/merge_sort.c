@@ -17,7 +17,7 @@ int compareValue(int rank, int partener, int value, int other_value, comp_t comp
 	int min = (value < other_value) ? value : other_value;
 	int max = (value > other_value) ? value : other_value;
 
-	printf("SRC_%d COMP: [%d] --> [%d] with %d(%d and %d)\n", rank, rank, partener, compType, value, other_value);
+	printf("SRC_%02d COMP: [%d] --> [%d] with %d(%d and %d)\n", rank, rank, partener, compType, value, other_value);
 	if (compType == PLUS){
 		if (rank < partener){
 			return min;
@@ -42,18 +42,18 @@ int sendAndRecv(int rank, int partener, int value, int tag){
 	if (rank < partener){
 		//send value to partener
 		MPI_Send(&value, 1, MPI_INT, partener, tag, MPI_COMM_WORLD);
-		printf("SRC_%d %d: [%d] >>> [%d] -- %d\n", rank, tag, rank, partener, value);
+		printf("SRC_%02d %d: [%d] >>> [%d] -- %d\n", rank, tag, rank, partener, value);
 		//recv other_value from partener
 		MPI_Recv(&other_value, 1, MPI_INT, partener, tag, MPI_COMM_WORLD, NULL);
-		printf("SRC_%d %d: [%d] <<< [%d] -- %d\n", rank, tag, rank, partener, other_value);
+		printf("SRC_%02d %d: [%d] <<< [%d] -- %d\n", rank, tag, rank, partener, other_value);
 	}
 	else {
 		//recv other_value from partener
 		MPI_Recv(&other_value, 1, MPI_INT, partener, tag, MPI_COMM_WORLD, NULL);
-		printf("SRC_%d %d: [%d] <<< [%d] -- %d\n", rank, tag, rank, partener, other_value);
+		printf("SRC_%02d %d: [%d] <<< [%d] -- %d\n", rank, tag, rank, partener, other_value);
 		//send value to partener
 		MPI_Send(&value, 1, MPI_INT, partener, tag, MPI_COMM_WORLD);
-		printf("SRC_%d %d: [%d] >>> [%d] -- %d\n", rank, tag, rank, partener, value);
+		printf("SRC_%02d %d: [%d] >>> [%d] -- %d\n", rank, tag, rank, partener, value);
 	}
 	return other_value;
 
@@ -112,21 +112,16 @@ int main(int argc, char **args) {
 		}
 	}
 
-	if (rank == 0){
-		printf("\n- - - - SORT phase - - - - \n");
-	}
 	//2. Sort bitonic sequence
 	compType = PLUS; // Comparator type remains the same for all nodes
 	for(i = exp; i>0; --i){
 		partener = rank ^ (1 << (i-1)); // flip the i-1 bit to find the partener
 		other_value = sendAndRecv(rank, partener, value, i);
 		value = compareValue(rank, partener, value, other_value, compType);
-		if (rank == 0){
-			printf("\n");
-		}
 	}
 
-	printf("SRC_%d FINAL VALUE [%d] -- %d\n", rank, rank, value);
+	printf("FINAL VALUE [%02d] -- %d\n", rank, value);
+	printf("SRC_%02d FINAL -- %d\n", rank, value);
 
 	MPI_Finalize();
 	return 0;
