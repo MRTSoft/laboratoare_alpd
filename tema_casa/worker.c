@@ -132,6 +132,54 @@ void map(const char * file){
 	
 }
 
+typedef struct _record_t {
+	char * source;
+	int count;
+} record_t;
+
+#define MAX_RECORDS 100
+#define MAX_RECORD_SIZE 300
+
+void addIndexEntry(const char * fileSrc, const char * source, int count) {
+	//TODO read this from the file as wc-1
+	
+	record_t * records = (record*) malloc(MAX_RECORDS * sizeof(record_t));
+	
+	// TODO aquire lock on file
+	/*
+	struct flock fl;
+	memset(&fl, 0, sizeof(f1));
+	// lock entire file for reading
+	fl.l_type = F_WRLCK;
+	fl.l_whence = SEEK_SET;
+	fl.l_start = 0;
+	fl.l_len = 0;
+	*/
+	char buffer[MAX_RECORD_SIZE];
+	char auxCount = -1;
+	int N = 0;
+	FILE * in = fopen(fileSrc, "r");
+	while (!feof(in)){
+		scanf("%s %d", buffer, auxCount);
+		records[N].source = (char *)malloc((strlen(buffer)+1) * sizeof(char));
+		records[N].count = auxCount;
+		N++;
+	}
+	fclose(in);
+
+	records[N].source = (char*)malloc((strlen(source)+1) * sizeof(char));
+	records[N].count = count;
+	N++;
+
+	//sort the list
+	
+	//rewrite the file
+	in = fopen(fileSrc, "w");
+	//write the term
+	//Write the records
+	fclose(in);
+}
+
 void reduce(const char * file){
 	char term[250];
 	char source[250];
@@ -158,6 +206,8 @@ void reduce(const char * file){
 		if (out != NULL){
 			fprintf(out, "%s %d\n", source, count);
 		}
+		//append entr
+		addIndexEntry(reducedFile, source, count);
 		fclose(out);
 	}
 	else {
