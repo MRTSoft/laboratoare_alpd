@@ -1,7 +1,7 @@
 #ifndef _WORKER_H_
 #define _WORKER_H_
 
-#include "comms.h"
+#include "common.h"
 
 extern char tmp_dir[500];
 

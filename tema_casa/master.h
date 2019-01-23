@@ -1,7 +1,7 @@
 #ifndef _MASTER_H_
 #define _MASTER_H_
 
-#include "comms.h"
+#include "common.h"
 
 #define ERROR_INPUT 100
 

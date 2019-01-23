@@ -39,6 +39,10 @@ int runWorker(int master) {
 			case TAG_STOP:
 				keepAlive = 0;
 				break;
+			case TAG_SYNC:
+				MPI_Barrier(MPI_COMM_WORLD);
+				sendFree(master);
+				break;
 			default:
 				keepAlive = 0;
 		}
@@ -82,11 +86,9 @@ void filterEntry(const char * entry, char * output){
 
 void appendEntry(const char * entry, const char * source) {
 	char path[500];
-	char sanitizedEntry[200];
-	filterEntry(entry, sanitizedEntry);
 	int rank = -1;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	sprintf(path, "%s/%s_%s", tmp_dir, sanitizedEntry, strrchr(source, '/')+1);
+	sprintf(path, "%s/%s_%s", tmp_dir, entry, strrchr(source, '/')+1);
 	//printf("Path of interim file is: %s\n", path);
 	int fd = open(path, O_CREAT | O_WRONLY | O_EXCL, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
@@ -102,7 +104,7 @@ void appendEntry(const char * entry, const char * source) {
 		//Use standard C syntax to write stuff
 		FILE * out = fopen(path, "w");
 		if (out != NULL) {
-			fprintf(out, "%s\n%s\n", sanitizedEntry, source);
+			fprintf(out, "%s\n%s\n", entry, source);
 			fclose(out);
 		}
 	}
@@ -111,7 +113,7 @@ void appendEntry(const char * entry, const char * source) {
 void map(const char * file){
 	int rank = -1;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	printf("[%02d] Opening %s ... \n", rank, file);
+	//printf("[%02d] Opening %s ... \n", rank, file);
 	FILE * in = fopen(file, "r");
 	if (in == NULL){
 		printf("[%02d] ERROR -- Unable to open %s\n", file);
@@ -121,9 +123,14 @@ void map(const char * file){
 	char sWord[100];
 	while (!feof(in)){
 		fscanf(in, "%s", word);
-		filterEntry(word, sWord);
-		if (strlen(sWord) > 3){
-			//printf("Appending %s...\n", word);
+		//printf("[%2d] Read |%s|\n", rank, word);
+		int isWord = 1;
+		char * chr = NULL;
+		for(chr = word; *chr!='\0' && isWord; chr++){
+			isWord = isalnum(*chr);
+			*chr = tolower(*chr);
+		}
+		if ((strlen(word) > 3) && (isWord == 1)){
 			appendEntry(word, file);
 		}
 	}
@@ -143,7 +150,7 @@ typedef struct _record_t {
 void addIndexEntry(const char * fileSrc, const char * source, int count) {
 	//TODO read this from the file as wc-1
 	
-	record_t * records = (record*) malloc(MAX_RECORDS * sizeof(record_t));
+	record_t * records = (record_t*) malloc(MAX_RECORDS * sizeof(record_t));
 	
 	// TODO aquire lock on file
 	/*
