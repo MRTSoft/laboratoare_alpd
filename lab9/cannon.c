@@ -26,6 +26,8 @@ int main(int argc, char **args) {
 		MPI_Finalize();
 		return 0;
 	}
+
+	int * FM = (int*)malloc(sizeof(int)*SIZE);
 	
 	//0. Create the topology
 	int dims[2] = {dim, dim};
@@ -51,15 +53,18 @@ int main(int argc, char **args) {
 	int i = coords[0];
 	int j = coords[1];
 	int nLeft, nRight, nUp, nDown;
-	int ncLeft[2] = {i, (j-1)%dim};
+	int ncLeft[2] = {i, ((j-1)<0) ? dim-1 : j-1};
 	int ncRight[2] = {i, (j+1)%dim};
-	int ncUp[2] = {(i+1)%dim, j};
-	int ncDown[2] = {(i-1)%dim, j};
+	int ncUp[2] = {((i-1) < 0)? dim-1: i-1, j};
+	int ncDown[2] = {i+1, j};
+
 
 	MPI_Cart_rank(cartComm, ncLeft, &nLeft);
 	MPI_Cart_rank(cartComm, ncRight, &nRight);
 	MPI_Cart_rank(cartComm, ncUp, &nUp);
 	MPI_Cart_rank(cartComm, ncDown, &nDown);
+
+	printf("Vecini [%2d] %02d*%02d: U-%02d D-%02d L-%02d R-%02d\n", rank, i, j, nUp, nDown, nLeft, nRight); 
 
 	for(k = 1; k <= i; ++k){
 		//Trimite Aij catre pi,j-1
@@ -80,8 +85,25 @@ int main(int argc, char **args) {
 	}
 	Cij += Aij * Bij;
 
-	printf("Result [%02d]: %d\n", rank, Cij);
-
+	//printf("Result [%02d]: %d\n", rank, Cij);
+	if (rank == 0){
+		FM[0] = Cij;
+		for(k = 1; k < SIZE; ++k){
+			MPI_Status stats;
+			MPI_Recv(&Cij, 1, MPI_INT, MPI_ANY_SOURCE, 0xbeef, MPI_COMM_WORLD, &stats);
+			FM[stats.MPI_SOURCE] = Cij;
+		}
+		for(i=0; i<dim; ++i){
+			printf("R%d:\t", i);
+			for(j=0; j<dim; ++j){
+				printf("%02d ", FM[i*dim+j]);
+			}
+			printf("\n");
+		}
+	}
+	else {
+		MPI_Send(&Cij, 1, MPI_INT, 0, 0xbeef, MPI_COMM_WORLD);
+	}
 	MPI_Finalize();
 	return 0;
 }
