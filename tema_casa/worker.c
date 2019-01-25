@@ -10,7 +10,8 @@
 #include <ctype.h>
 
 
-char tmp_dir[500] = "./data-interim";
+char tmp_dir[MAX_PATH_LEN] = "./data-interim";
+char out_dir[MAX_PATH_LEN] = "./data-output";
 
 
 void sendFree(int master){
@@ -50,42 +51,8 @@ int runWorker(int master) {
 	return 0;
 }
 
-void filterEntry(const char * entry, char * output){
-	int i = 0;
-	//turn entry to lowercase 
-	for(i = 0; entry[i]; ++i){
-		output[i] = tolower(entry[i]);
-	}
-	output[i] = '\0';
-	for (i = 0; output[i]; ++i){
-		if (output[i] < 'a' || output[i] > 'z'){
-			output[i] = '_';
-		}
-	}
-	int start = -1;
-	int end = -1;
-	for(i = 0; output[i]; ++i){
-		if (output[i] != '_'){
-			if (start == -1){
-				start = i;
-			}
-			end = i;
-		}
-	}
-	if (start != -1){
-		for(i = 0; start <= end; ++start, ++i){
-			output[i] = output[start];
-		}
-		output[i] = '\0';
-	}
-	else {
-		output[0] = '\0';
-	}
-
-}
-
 void appendEntry(const char * entry, const char * source) {
-	char path[500];
+	char path[MAX_PATH_LEN];
 	int rank = -1;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	sprintf(path, "%s/%s_%s", tmp_dir, entry, strrchr(source, '/')+1);
@@ -93,9 +60,14 @@ void appendEntry(const char * entry, const char * source) {
 	int fd = open(path, O_CREAT | O_WRONLY | O_EXCL, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
 		//The file already exist
-		FILE * out = fopen(path, "a"); //open in append mode
+		int oldCount = 0;
+		FILE * in = fopen(path, "r");
+		fscanf(in, "%d", &oldCount);
+		fclose(in);
+
+		FILE * out = fopen(path, "w"); //open in append mode
 		if (out != NULL){
-			fprintf(out, "%s\n", source);
+			fprintf(out, "%d\n", oldCount + 1);
 		}
 		fclose(out);
 	}
@@ -104,7 +76,7 @@ void appendEntry(const char * entry, const char * source) {
 		//Use standard C syntax to write stuff
 		FILE * out = fopen(path, "w");
 		if (out != NULL) {
-			fprintf(out, "%s\n%s\n", entry, source);
+			fprintf(out, "1\n");
 			fclose(out);
 		}
 	}
@@ -123,109 +95,67 @@ void map(const char * file){
 	char sWord[100];
 	while (!feof(in)){
 		fscanf(in, "%s", word);
-		//printf("[%2d] Read |%s|\n", rank, word);
 		int isWord = 1;
 		char * chr = NULL;
-		for(chr = word; *chr!='\0' && isWord; chr++){
+		for(chr = word; (*chr!='\0') && (isWord != 0); chr++){
 			isWord = isalnum(*chr);
+			//printf("[%2d] chr: %c | isalnum: %d\n", rank, *chr, isalnum(*chr));
 			*chr = tolower(*chr);
 		}
-		if ((strlen(word) > 3) && (isWord == 1)){
+		if ((strlen(word) > 3) && (isWord != 0)){
+			//printf("[%2d] Read |%s| -- %d\n", rank, word, isWord);
 			appendEntry(word, file);
 		}
 	}
-
-	fclose(in);
-	
-}
-
-typedef struct _record_t {
-	char * source;
-	int count;
-} record_t;
-
-#define MAX_RECORDS 100
-#define MAX_RECORD_SIZE 300
-
-void addIndexEntry(const char * fileSrc, const char * source, int count) {
-	//TODO read this from the file as wc-1
-	
-	record_t * records = (record_t*) malloc(MAX_RECORDS * sizeof(record_t));
-	
-	// TODO aquire lock on file
-	/*
-	struct flock fl;
-	memset(&fl, 0, sizeof(f1));
-	// lock entire file for reading
-	fl.l_type = F_WRLCK;
-	fl.l_whence = SEEK_SET;
-	fl.l_start = 0;
-	fl.l_len = 0;
-	*/
-	char buffer[MAX_RECORD_SIZE];
-	char auxCount = -1;
-	int N = 0;
-	FILE * in = fopen(fileSrc, "r");
-	while (!feof(in)){
-		scanf("%s %d", buffer, auxCount);
-		records[N].source = (char *)malloc((strlen(buffer)+1) * sizeof(char));
-		records[N].count = auxCount;
-		N++;
-	}
-	fclose(in);
-
-	records[N].source = (char*)malloc((strlen(source)+1) * sizeof(char));
-	records[N].count = count;
-	N++;
-
-	//sort the list
-	
-	//rewrite the file
-	in = fopen(fileSrc, "w");
-	//write the term
-	//Write the records
 	fclose(in);
 }
 
-void reduce(const char * file){
-	char term[250];
-	char source[250];
-	int rank;
-	int count = -1;
+void reduce(const char * word){
+	int rank = -1;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	printf("[%02d] Reducing %s\n", rank, file);
-	FILE * in = fopen(file, "r");
-	fgets(term, 250, in);
-	while (!feof(in)){
-		fgets(source, 250, in); //dummy read to count lines
-		count++;
+	//printf("[%2d] REDUCING Word: %s\n", rank, word);
+	char cmd[MAX_PATH_LEN] = "";
+	snprintf(cmd, MAX_PATH_LEN, "ls -A %s/%s*.txt", tmp_dir, word);
+	FILE * fileList = openReadPipe(cmd);
+	if (fileList == NULL){
+		fprintf(stderr, "[%2d] Failed to execute piped command.\n", rank);
+		return;
 	}
-	term[strlen(term)-1] = '\0';//Remove the trailing \n
-	strncpy(source, strrchr(file, '/')+1+strlen(term)+1, 250);
+	char cleanWord[MAX_PATH_LEN];
+	char filePath[MAX_PATH_LEN];
+	char sourceFile[MAX_PATH_LEN];
+	char * delimitator;
 
-	fclose(in);
-	char reducedFile[250];
-	sprintf(reducedFile, "%s/reduce/%s", tmp_dir, term);
-	int fd = open(reducedFile, O_CREAT | O_WRONLY | O_EXCL, S_IRUSR | S_IWUSR);
-	if (fd < 0) {
-		//The file already exist
-		FILE * out = fopen(reducedFile, "a"); //open in append mode
-		if (out != NULL){
-			fprintf(out, "%s %d\n", source, count);
-		}
-		//append entr
-		addIndexEntry(reducedFile, source, count);
-		fclose(out);
+	strncpy(cleanWord, word, strlen(word));
+	cleanWord[strlen(word)-1] = '\0';//remove trailing _
+	//printf("[%2d] Clean word is %s\n", rank, cleanWord);
+	char rIndexPath[MAX_PATH_LEN];
+	sprintf(rIndexPath, "%s/%s.rev", out_dir, cleanWord);
+	FILE * reverseIndex = fopen(rIndexPath, "w");
+	if (reverseIndex == NULL){
+		fprintf(stderr, "[%2d] Unable to create output file: %s\n", rank, rIndexPath);
+		pclose(fileList);
+		return;
 	}
-	else {
-		close(fd);
-		//Use standard C syntax to write stuff
-		FILE * out = fopen(reducedFile, "w");
-		if (out != NULL) {
-			fprintf(out, "%s\n%s %d\n", term, source, count);
-			fclose(out);
+
+	while (fgets(filePath, MAX_PATH_LEN, fileList) != NULL){
+		filePath[strlen(filePath)-1] = '\0';//remove newline at the end
+		delimitator = memchr(filePath, DELIM_CHAR, strlen(filePath)) + 1;
+		strncpy(sourceFile, delimitator, strlen(delimitator));
+		sourceFile[strlen(delimitator)] = '\0';
+		//printf("[%2d] path: %s| delim: %s|\n", rank, filePath, sourceFile);
+		FILE * in = fopen(filePath, "r");
+		if (in == NULL){
+			fprintf(stderr, "[%2d] FATAL: Unable to open interim file: %s\n", rank, filePath);
+			continue;
 		}
+		int count = -1;
+		fscanf(in, "%d", &count);
+		fclose(in);
+		fprintf(reverseIndex, "%s %d\n", sourceFile, count);
 	}
+	fclose(reverseIndex);
+	pclose(fileList);
 }
 
 

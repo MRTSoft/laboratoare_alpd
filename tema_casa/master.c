@@ -41,6 +41,7 @@ int runMaster(const char * src, const char * interim, const char * dst) {
 		if (entry->d_type != DT_DIR){
 			freeWorker = waitForWorker();
 			sprintf(path, "%s/%s", src, entry->d_name);
+			printf("Mapping file %s\n", path);
 			MPI_Send(path, strlen(path)+1, MPI_CHAR, freeWorker, TAG_MAP, MPI_COMM_WORLD);
 		}
 	}
@@ -68,7 +69,7 @@ int runMaster(const char * src, const char * interim, const char * dst) {
 	// Assign word to free node
 
 	char cmd[MAX_PATH_LEN] = "";
-	snprintf(cmd, MAX_PATH_LEN, "ls -A %s/*.txt", interim);
+	snprintf(cmd, MAX_PATH_LEN, "ls -A %s/", interim);
 	FILE * fileList = openReadPipe(cmd);
 	if (fileList == NULL){
 		fprintf(stderr, "[MASTER] Failed to execute piped command.\n");
@@ -81,17 +82,33 @@ int runMaster(const char * src, const char * interim, const char * dst) {
 	char * filePath = (char*) malloc(sizeof(char) * MAX_PATH_LEN);
 	int wordLen = 0;
 	word[0] = oldWord[0] = '\0';
+	int allFree = 1;//We had a barrier so all workers are free
+	freeWorker = 0;
+
+	char oldLetter = '\0';
+	char newLetter = '\0';
 
 	while (fgets(filePath, MAX_PATH_LEN, fileList) != NULL){
 		//freeWorker = waitForWorker();
 		strncpy(oldWord, word, strlen(word)+1);
-		delimitator = memchr(filePath, DELIM_CHAR, strlen(filePath));
+		delimitator = strchr(filePath, DELIM_CHAR);
 		wordLen = delimitator - filePath + 1;
 		strncpy(word, filePath, wordLen);
 		word[wordLen] = '\0';
 		if (strncmp(word, oldWord, MAX_PATH_LEN) != 0){
-			//printf("Processing the word: %s\n", word);
-			//MPI_Send(path, strlen(path)+1, MPI_CHAR, freeWorker, TAG_MAP, MPI_COMM_WORLD);
+			newLetter = word[0];
+			if (newLetter != oldLetter){
+				oldLetter = newLetter;
+				printf("Processing the letter: %c\n", newLetter);
+			}
+			if ((allFree == 1) && (freeWorker < SIZE-1)) {
+				freeWorker++;
+			}
+			else {
+				freeWorker = waitForWorker();
+				allFree = 0;
+			}
+			MPI_Send(word, strlen(word)+1, MPI_CHAR, freeWorker, TAG_REDUCE, MPI_COMM_WORLD);
 		}
 	}
 	pclose(fileList);

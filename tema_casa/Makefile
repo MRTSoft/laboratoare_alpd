@@ -1,9 +1,9 @@
 all: run
 
-NODES=8
+NODES=4
 run: compile
 	@echo "Map Reduce Implementation"
-	mkdir -p data-interim/reduce
+	mkdir -p data-interim
 	mpirun -n $(NODES) map_reduce
 	@echo ""
 
@@ -12,9 +12,10 @@ debug: compile
 
 
 compile: *.c
-	mpicc *.c -o map_reduce 
+	mpicc -g *.c -o map_reduce 
 
 clean:
 	rm -rf map_reduce
 	rm -rf data-interim
-	mkdir -p data-interim/reduce
+	rm -rf data-output/*
+	mkdir -p data-interim
